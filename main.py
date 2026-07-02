@@ -7,4 +7,18 @@ st.set_page_config(
 )
 
 st.title("🚌 Smart Bus Route System")
-st.write("Welcome Admin")
+st.subheader("Admin Dashboard")
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric("Students", "0")
+
+with col2:
+    st.metric("Buses", "0")
+
+with col3:
+    st.metric("Routes", "0")
+
+with col4:
+    st.metric("Attendance", "0%")
