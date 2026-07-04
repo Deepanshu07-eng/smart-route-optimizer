@@ -4,6 +4,7 @@ from database import get_connection
 
 st.title("👨‍🎓 Student Management")
 
+#add student
 with st.form("student_form"):
     name = st.text_input("Student Name")
     roll = st.text_input("Roll Number")
@@ -13,22 +14,28 @@ with st.form("student_form"):
     submit = st.form_submit_button("Add Student")
 
 if submit:
-    conn = get_connection()
-    cursor = conn.cursor()
+    if name and roll and phone and location:
+        conn = get_connection()
+        cursor = conn.cursor()
 
-    query = """
-    INSERT INTO students (name, roll_no, phone, pickup_location)
-    VALUES (%s, %s, %s, %s)
-    """
+        cursor.execute(
+            """
+            INSERT INTO students (name, roll_no, phone, pickup_location)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (name, roll, phone, location)
+        )
 
-    cursor.execute(query, (name, roll, phone, location))
-    conn.commit()
+        conn.commit()
+        cursor.close()
+        conn.close()
 
-    cursor.close()
-    conn.close()
+        st.success(f"{name} added successfully")
+        st.rerun()
+    else:
+        st.error("Please fill all fields.")
 
-    st.success(f"{name} added successfully")
-
+#view student
 st.divider()
 st.subheader("📋 All Students")
 
@@ -50,6 +57,7 @@ if students:
 else:
     st.info("No students found.")
 
+#delette student
 st.divider()
 st.subheader("🗑️ Delete Student")
 
@@ -68,6 +76,7 @@ if st.button("Delete Student"):
     st.success(f"Student ID {delete_id} deleted successfully!")
     st.rerun()
 
+#update student
 st.divider()
 st.subheader("✏️ Update Student")
 
@@ -79,21 +88,24 @@ new_phone = st.text_input("New Phone Number")
 new_location = st.text_input("New Pickup Location")
 
 if st.button("Update Student"):
-    conn = get_connection()
-    cursor = conn.cursor()
+    if new_name and new_roll and new_phone and new_location:
+        conn = get_connection()
+        cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        UPDATE students
-        SET name=%s, roll_no=%s, phone=%s, pickup_location=%s
-        WHERE id=%s
-        """,
-        (new_name, new_roll, new_phone, new_location, update_id)
-    )
+        cursor.execute(
+            """
+            UPDATE students
+            SET name=%s, roll_no=%s, phone=%s, pickup_location=%s
+            WHERE id=%s
+            """,
+            (new_name, new_roll, new_phone, new_location, update_id)
+        )
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        conn.commit()
+        cursor.close()
+        conn.close()
 
-    st.success(f"Student ID {update_id} updated successfully!")
-    st.rerun()
+        st.success(f"Student ID {update_id} updated successfully!")
+        st.rerun()
+    else:
+        st.error("Please fill all update fields.")
