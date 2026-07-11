@@ -1,106 +1,50 @@
 import streamlit as st
+from db_helper import get_db_connection
 import pandas as pd
 from datetime import date
-from database import get_connection
 
-st.title("✅ Daily Attendance")
+st.title("📅 Daily Attendance Tracker")
 
-selected_date = st.date_input("Select Date", date.today())
+today = date.today()
+st.write(f"### Date: {today}")
 
-# ---------- FETCH STUDENTS ----------
-conn = get_connection()
-cursor = conn.cursor()
-
-cursor.execute("SELECT id, name, roll_no FROM students ORDER BY roll_no")
-students = cursor.fetchall()
-
-cursor.close()
-conn.close()
-
-if not students:
-    st.warning("No students found. Please add students first.")
-else:
-    st.subheader(f"Mark Attendance for {selected_date}")
-
-    attendance_data = []
-
-    with st.form("daily_attendance_form"):
-        for student in students:
-            student_id, name, roll_no = student
-
-            col1, col2, col3 = st.columns([1, 3, 2])
-
-            with col1:
-                st.write(f"**{roll_no}**")
-
-            with col2:
-                st.write(name)
-
-            with col3:
-                status = st.radio(
-                    "Status",
-                    ["Present", "Absent"],
-                    horizontal=True,
-                    key=f"attendance_{student_id}",
-                    label_visibility="collapsed"
-                )
-
-            attendance_data.append((student_id, name, status, selected_date))
-
-        submit = st.form_submit_button("Save Attendance")
-
-    if submit:
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        # same date ki old attendance delete, then new save
-        cursor.execute(
-            "DELETE FROM attendance WHERE attendance_date = %s",
-            (selected_date,)
-        )
-
-        for record in attendance_data:
-            cursor.execute(
-                """
-                INSERT INTO attendance
-                (student_id, student_name, status, attendance_date)
-                VALUES (%s, %s, %s, %s)
-                """,
-                record
-            )
-
-        conn.commit()
+conn = get_db_connection()
+if conn:
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, name, roll_number FROM students")
+        students = cursor.fetchall()
+        
+        if students:
+            with st.form("attendance_form"):
+                attendance_data = {}
+                for s in students:
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.write(f"**{s['name']}** ({s['roll_number']})")
+                    with col2:
+                        attendance_data[s['id']] = st.radio(
+                            "Status", ["Present", "Absent", "Late"], 
+                            key=f"att_{s['id']}", label_visibility="collapsed"
+                        )
+                
+                submit = st.form_submit_button("Submit Attendance")
+                
+            if submit:
+                save_cursor = conn.cursor()
+                for s_id, status in attendance_data.items():
+                    query = """
+                    INSERT INTO attendance (student_id, date, status)
+                    VALUES (%s, %s, %s)
+                    ON DUPLICATE KEY UPDATE status = %s
+                    """
+                    save_cursor.execute(query, (s_id, today, status, status))
+                conn.commit()
+                st.success("🎉 Attendance marked successfully for today!")
+                save_cursor.close()
+        else:
+            st.info("No students registered yet to mark attendance.")
         cursor.close()
         conn.close()
-
-        st.success("Attendance saved successfully!")
-        st.rerun()
-
-# ---------- VIEW ATTENDANCE ----------
-st.divider()
-st.subheader("📋 Attendance Records")
-
-conn = get_connection()
-cursor = conn.cursor()
-
-cursor.execute(
-    """
-    SELECT id, student_id, student_name, status, attendance_date
-    FROM attendance
-    ORDER BY attendance_date DESC, student_id ASC
-    """
-)
-
-records = cursor.fetchall()
-
-cursor.close()
-conn.close()
-
-if records:
-    df = pd.DataFrame(
-        records,
-        columns=["ID", "Student ID", "Student Name", "Status", "Date"]
-    )
-    st.dataframe(df, use_container_width=True)
-else:
-    st.info("No attendance records found.")
+    except Exception as e:
+        st.error(f"Error: {e}")
