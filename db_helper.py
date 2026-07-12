@@ -1,14 +1,12 @@
 import mysql.connector
 from mysql.connector import Error
-import streamlit as st
 
 def get_db_connection():
     try:
-        # Hum direct root se connect karenge taaki access denied ka chance hi na rahe
         connection = mysql.connector.connect(
             host='localhost',
-            user='root',         # <--- 'bususer' ki jagah 'root' kar diya
-            password='',         # <--- Agar root ka koi password rakha tha toh yahan likho, nahi toh blank "" chhod do
+            user='root',
+            password='',
             database='bus_route_system'
         )
         if connection.is_connected():
@@ -61,6 +59,14 @@ def get_db_connection():
             connection.commit()
             cursor.close()
         return connection
-    except Error as e:
-        st.error(f"❌ MySQL Live Connection Error: {e}")
+    except Error:
         return None
+
+# YEH FUNCTION MISSING THA YA SAVED NAHI THA, ISKO DHAN SE RAKHNA HAI
+def local_css(file_name):
+    import streamlit as st
+    try:
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    except Exception:
+        pass
