@@ -1,2 +1,6 @@
 streamlit
 geopy
+mysql-connector-python
+folium
+streamlit-folium
+requests
