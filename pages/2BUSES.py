@@ -1,166 +1,231 @@
 import streamlit as st
-import pandas as pd
 from db_helper import get_db_connection
 
-st.title("🚌 Bus & Driver Management")
-st.caption("Manage your school transportation fleet.")
+st.title("Bus & Driver Management")
 
 # =====================================================
-# Fleet Statistics
+# 1. FLEET METRICS PANEL
 # =====================================================
-total_buses = 0
-available = 0
-running = 0
-maintenance = 0
-
+total_buses, available, running, maintenance = 0, 0, 0, 0
 conn = get_db_connection()
 if conn:
-    try:
-        cursor = conn.cursor(dictionary=True)
-        
-        cursor.execute("SELECT COUNT(*) AS total FROM buses")
-        total_buses = cursor.fetchone()["total"]
-        
-        cursor.execute("SELECT COUNT(*) AS total FROM buses WHERE status='Available'")
-        available = cursor.fetchone()["total"]
-        
-        cursor.execute("SELECT COUNT(*) AS total FROM buses WHERE status='Running'")
-        running = cursor.fetchone()["total"]
-        
-        cursor.execute("SELECT COUNT(*) AS total FROM buses WHERE status='Maintenance'")
-        maintenance = cursor.fetchone()["total"]
-        
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) AS total FROM buses")
+    total_buses = cursor.fetchone()["total"]
+    cursor.execute("SELECT COUNT(*) AS total FROM buses WHERE status='Available'")
+    available = cursor.fetchone()["total"]
+    cursor.execute("SELECT COUNT(*) AS total FROM buses WHERE status='Running'")
+    running = cursor.fetchone()["total"]
+    cursor.execute("SELECT COUNT(*) AS total FROM buses WHERE status='Maintenance'")
+    maintenance = cursor.fetchone()["total"]
+    cursor.close()
+    conn.close()
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("🚌 Total", total_buses)
-col2.metric("✅ Available", available)
-col3.metric("🚍 Running", running)
-col4.metric("🔧 Maintenance", maintenance)
+col1.metric("Total", total_buses)
+col2.metric("Available", available)
+col3.metric("Running", running)
+col4.metric("Maintenance", maintenance)
 
 st.divider()
 
 # =====================================================
-# Add Bus
+# 2. REGISTER NEW BUS
 # =====================================================
-st.subheader("➕ Register New Bus")
-
+st.subheader("Register New Bus")
 with st.form("bus_form", clear_on_submit=True):
     c1, c2 = st.columns(2)
-    with c1:
-        bus_number = st.text_input("Bus Number")
-        capacity = st.number_input("Capacity", min_value=1, max_value=100, value=40)
-    with c2:
-        driver_name = st.text_input("Driver Name")
-        driver_phone = st.text_input("Driver Phone")
-        
+    bus_number = c1.text_input("Bus Number")
+    capacity = c1.number_input("Capacity", min_value=1, max_value=100, value=40)
+    driver_name = c2.text_input("Driver Name")
+    driver_phone = c2.text_input("Driver Phone")
     status = st.selectbox("Bus Status", ["Available", "Running", "Maintenance"])
     submit = st.form_submit_button("Save Bus")
 
-if submit:
-    if not bus_number or not driver_name:
-        st.warning("Bus Number and Driver Name are required.")
+if submit and bus_number and driver_name:
+    conn = get_db_connection()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO buses (bus_number, capacity, driver_name, driver_phone, status) VALUES (%s, %s, %s, %s, %s)",
+            (bus_number, capacity, driver_name, driver_phone, status)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        st.success("Bus registered successfully.")
+        st.rerun()
+
+st.divider()
+
+# =====================================================
+# 3. ACTION MANAGEMENT PANEL
+# =====================================================
+st.subheader("Action Management Panel")
+action_choice = st.selectbox(
+    "Choose Operation Mode", 
+    [
+        "--- Select Action ---", 
+        "👥 Assign Student to Bus", 
+        "✏️ Update Bus Status", 
+        "🗑️ Delete Bus from Fleet"
+    ]
+)
+
+# Fetch current active fleet list for selector dropdowns
+all_buses = {}
+conn = get_db_connection()
+if conn:
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, bus_number FROM buses")
+    for b in cursor.fetchall():
+        all_buses[b['id']] = b['bus_number']
+    cursor.close()
+    conn.close()
+
+# 👥 DYNAMIC OPTION: TABLE STYLE BUS ASSIGNMENT (EXACTLY LIKE YOUR SCREENSHOT)
+if action_choice == "👥 Assign Student to Bus":
+    st.write("### Manage Student Bus Allocations")
+    
+    students_list = []
+    conn = get_db_connection()
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, name, roll_number, bus_id FROM students ORDER BY name ASC")
+        students_list = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+    if not students_list:
+        st.info("No students found in the system.")
     else:
-        conn = get_db_connection()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO buses (bus_number, capacity, driver_name, driver_phone, status)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (bus_number, capacity, driver_name, driver_phone, status)
+        assignment_states = {}
+        
+        # Batch form layout
+        with st.form("bulk_assignment_form"):
+            h1, h2, h3 = st.columns([2, 1, 2])
+            h1.markdown("**Student Name**")
+            h2.markdown("**Roll No**")
+            h3.markdown("**Assign Bus Allocation**")
+            st.divider()
+            
+            # Options list creation for the selectbox (Including an unassigned option)
+            bus_ids = [0] + list(all_buses.keys())
+            
+            def format_bus_display(x):
+                return "Not Assigned" if x == 0 else all_buses[x]
+
+            for s in students_list:
+                c1, c2, c3 = st.columns([2, 1, 2])
+                c1.write(s['name'])
+                c2.write(s['roll_number'])
+                
+                # Check current bus link status fallback
+                current_bus = s['bus_id'] if s['bus_id'] in all_buses else 0
+                default_idx = bus_ids.index(current_bus) if current_bus in bus_ids else 0
+                
+                # Input dropdown element vectors mapping
+                assignment_states[s['id']] = c3.selectbox(
+                    f"Bus Selection for {s['id']}",
+                    options=bus_ids,
+                    format_func=format_bus_display,
+                    index=default_idx,
+                    label_visibility="collapsed",
+                    key=f"select_{s['id']}"
                 )
+                
+            save_allocations = st.form_submit_button("Save All Allocations", use_container_width=True)
+
+        if save_allocations:
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                summary_messages = []
+                
+                for s_id, allocated_bus in assignment_states.items():
+                    db_val = None if allocated_bus == 0 else allocated_bus
+                    cursor.execute("UPDATE students SET bus_id = %s WHERE id = %s", (db_val, s_id))
+                    
+                    
                 conn.commit()
                 cursor.close()
                 conn.close()
                 
-                st.toast("Bus Added Successfully 🚍")
-                st.success("Fleet updated successfully! Refreshing dynamic panels...")
-                
-                # JavaScript fallback logic use karenge standard rerun bypass ke liye
-                st.markdown('<meta http-equiv="refresh" content="1">', unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"Database Error: {e}")
+                # Dynamic visual success box with exact mapping confirmations
+                st.success("🎉 Your allocations have been successfully saved to the database!")
+                for msg in summary_messages:
+                    st.info(msg)
+                    
+                st.toast("Allocations Saved!")
+                # Thoda pause de kar rerun karenge taaki user validation logs dekh sake
+                if st.button("Click to Refresh Panel View"):
+                    st.rerun()
+
+# ✏️ DYNAMIC OPTION: UPDATE BUS STATUS
+elif action_choice == "✏️ Update Bus Status":
+    st.write("### Change Fleet Status")
+    if all_buses:
+        u_id = st.selectbox("Select Bus to Update", options=list(all_buses.keys()), format_func=lambda x: all_buses[x])
+        new_status = st.selectbox("New Status Code", ["Available", "Running", "Maintenance"])
+        if st.button("Update Status"):
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE buses SET status=%s WHERE id=%s", (new_status, u_id))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                st.success("Status updated.")
+                st.rerun()
+
+# 🗑️ DYNAMIC OPTION: DELETE BUS
+elif action_choice == "🗑️ Delete Bus from Fleet":
+    st.write("### Remove Vehicle Record")
+    if all_buses:
+        d_id = st.selectbox("Select Bus to Delete", options=list(all_buses.keys()), format_func=lambda x: all_buses[x])
+        if st.button("Confirm Delete", type="primary"):
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM buses WHERE id=%s", (d_id,))
+                conn.commit()
+                cursor.close()
+                conn.close()
+                st.warning("Bus removed.")
+                st.rerun()
 
 st.divider()
 
 # =====================================================
-# Fleet List
+# 4. ACTIVE FLEET LIST (PURE PYTHON VIEW)
 # =====================================================
-st.subheader("🚍 Fleet List")
-search = st.text_input("🔍 Search Bus Number")
-
+st.subheader("Active Fleet List")
+search = st.text_input("Search Bus Number")
 conn = get_db_connection()
 if conn:
-    try:
-        cursor = conn.cursor(dictionary=True)
-        if search:
-            cursor.execute("SELECT * FROM buses WHERE bus_number LIKE %s", (f"%{search}%",))
-        else:
-            cursor.execute("SELECT * FROM buses ORDER BY id DESC")
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
-        if rows:
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No buses found.")
-    except Exception as e:
-        st.error(f"Error fetching logs: {e}")
-
-st.divider()
-
-# =====================================================
-# Update Bus
-# =====================================================
-st.subheader("✏ Update Bus Status")
-
-u1, u2 = st.columns(2)
-with u1:
-    update_id = st.number_input("Bus ID", min_value=1, step=1)
-with u2:
-    new_status = st.selectbox("New Status", ["Available", "Running", "Maintenance"], key="update_status_box")
-
-if st.button("Update Status"):
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE buses SET status=%s WHERE id=%s", (new_status, update_id))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            st.success("Status Updated Successfully!")
-            st.markdown('<meta http-equiv="refresh" content="1">', unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"Update Failed: {e}")
-
-st.divider()
-
-# =====================================================
-# Delete Bus
-# =====================================================
-st.subheader("🗑 Delete Bus from Fleet")
-
-delete_id = st.number_input("Delete Bus ID", min_value=1, step=1, key="delete")
-
-if st.button("Delete Bus"):
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM buses WHERE id=%s", (delete_id,))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            st.success("Bus Deleted Successfully from Database.")
-            st.markdown('<meta http-equiv="refresh" content="1">', unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"Delete Failed: {e}")
+    cursor = conn.cursor(dictionary=True)
+    if search:
+        cursor.execute("SELECT id, bus_number, capacity, driver_name, driver_phone, status FROM buses WHERE bus_number LIKE %s", (f"%{search}%",))
+    else:
+        cursor.execute("SELECT id, bus_number, capacity, driver_name, driver_phone, status FROM buses ORDER BY id DESC")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    if rows:
+        h1, h2, h3, h4, h5 = st.columns([1, 2, 1, 2, 2])
+        h1.markdown("**ID**")
+        h2.markdown("**Bus Number**")
+        h3.markdown("**Cap**")
+        h4.markdown("**Driver**")
+        h5.markdown("**Status**")
+        st.divider()
+        for r in rows:
+            c1, c2, c3, c4, c5 = st.columns([1, 2, 1, 2, 2])
+            c1.write(str(r['id']))
+            c2.write(r['bus_number'])
+            c3.write(str(r['capacity']))
+            c4.write(r['driver_name'])
+            c5.write(r['status'])
+    else:
+        st.info("No records found.")

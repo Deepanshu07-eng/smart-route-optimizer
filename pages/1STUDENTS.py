@@ -3,10 +3,31 @@ import pandas as pd
 from db_helper import get_db_connection
 from geopy.geocoders import Nominatim
 
+def get_coordinates(address):
+    try:
+        geolocator = Nominatim(
+            user_agent="smart_bus_route_system"
+        )
+
+        location = geolocator.geocode(
+            address + ", India",
+            timeout=10
+        )
+
+        if location:
+            return location.latitude, location.longitude
+
+        return None, None
+
+    except Exception:
+        return None, None
+
+
+
 st.title("🎓 Student Management")
 st.caption("Manage student registrations and their pickup locations.")
 
-# Helper function for Geocoding (Address to Lat/Lng)
+# Helper function for GeoCoding (Address to Latitudee/Lngitude)
 def get_coordinates(address):
     try:
         geolocator = Nominatim(user_agent="bus_route_app_2026")
@@ -17,9 +38,7 @@ def get_coordinates(address):
     except:
         return 0.0, 0.0
 
-# =====================================================
-# Student Statistics
-# =====================================================
+#students deatils
 total_students = 0
 mapped_students = 0
 
@@ -40,15 +59,13 @@ if conn:
         pass
 
 col1, col2 = st.columns(2)
-col1.metric("👥 Total Students Registered", total_students)
-col2.metric("📍 Geocoded (Mapped) Students", mapped_students)
+col1.metric("Total Students Registered", total_students)
+col2.metric("Geocoded (Mapped) Students", mapped_students)
 
 st.divider()
 
-# =====================================================
-# Add Student
-# =====================================================
-st.subheader("➕ Register New Student")
+#add studenT
+st.subheader("Register New Student")
 
 with st.form("student_form", clear_on_submit=True):
     c1, c2 = st.columns(2)
@@ -64,6 +81,7 @@ with st.form("student_form", clear_on_submit=True):
 if submit:
     if not name or not roll_number or not address:
         st.warning("Name, Roll Number, and Pickup Address are required.")
+    
     else:
         conn = get_db_connection()
         if conn:
@@ -91,11 +109,9 @@ if submit:
 
 st.divider()
 
-# =====================================================
-# Student List & Search
-# =====================================================
-st.subheader("📋 Registered Students Directory")
-search = st.text_input("🔍 Search Student by Name or Roll Number")
+#studentslist and search students
+st.subheader("Registered Students Directory")
+search = st.text_input("Search Student by Name or Roll Number")
 
 conn = get_db_connection()
 if conn:
@@ -123,10 +139,9 @@ if conn:
 
 st.divider()
 
-# =====================================================
-# Update Student Location
-# =====================================================
-st.subheader("✏ Update Student Location / Address")
+#student location updation
+
+st.subheader("Update Student Location / Address")
 
 u1, u2 = st.columns([1, 2])
 with u1:
@@ -159,9 +174,7 @@ if st.button("Update Address Details"):
 
 st.divider()
 
-# =====================================================
-# Delete Student
-# =====================================================
+#delete student
 st.subheader("🗑 Delete Student Record")
 
 delete_id = st.number_input("Delete Student ID", min_value=1, step=1, key="delete_sid")

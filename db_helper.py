@@ -62,11 +62,3 @@ def get_db_connection():
     except Error:
         return None
 
-# YEH FUNCTION MISSING THA YA SAVED NAHI THA, ISKO DHAN SE RAKHNA HAI
-def local_css(file_name):
-    import streamlit as st
-    try:
-        with open(file_name) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    except Exception:
-        pass
