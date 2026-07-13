@@ -99,3 +99,50 @@ def get_db_connection():
     except Error as error:
         st.error(f"Database connection failed: {error}")
         return None
+    
+    def get_db_connection():
+    try:
+        if "mysql" in st.secrets:
+            connection = mysql.connector.connect(
+                host=st.secrets["mysql"]["host"],
+                port=int(st.secrets["mysql"]["port"]),
+                user=st.secrets["mysql"]["user"],
+                password=st.secrets["mysql"]["password"],
+                database=st.secrets["mysql"]["database"],
+                ssl_verify_cert=True,
+                connection_timeout=20
+            )
+        else:
+            connection = mysql.connector.connect(
+                host="localhost",
+                port=3306,
+                user="root",
+                password="",
+                database="bus_route_system",
+                connection_timeout=10
+            )
+
+        if connection.is_connected():
+            create_tables(connection)
+            return connection
+
+        st.error("Database connection could not be established.")
+        return None
+
+    except Error as error:
+        st.error(f"Database connection failed: {error}")
+        return None
+
+
+def close_db_connection(connection, cursor=None):
+    try:
+        if cursor is not None:
+            cursor.close()
+    except Exception:
+        pass
+
+    try:
+        if connection is not None and connection.is_connected():
+            connection.close()
+    except Exception:
+        pass
