@@ -1,13 +1,16 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-from db_helper import get_db_connection
 from mysql.connector import Error
-from db_helper import get_db_connection, close_db_connection
+
+from db_helper import get_db_connection
+
 
 st.title("🗺️ Route & Bus Allocation")
 
-# create route
+
+# ================= CREATE ROUTE =================
+
 st.subheader("Create New Route")
 
 with st.form("route_form", clear_on_submit=True):
@@ -15,67 +18,98 @@ with st.form("route_form", clear_on_submit=True):
     start_point = st.text_input("Start Point")
     end_point = st.text_input("End Point")
     distance = st.number_input("Distance in KM", min_value=0.0, step=0.5)
-    time = st.text_input("Estimated Time")
-    status = st.selectbox("Route Status", ["Active", "Inactive"])
+    estimated_time = st.text_input("Estimated Time")
+    route_status = st.selectbox("Route Status", ["Active", "Inactive"])
 
     create_route = st.form_submit_button("Create Route")
 
 if create_route:
     if route_name and start_point and end_point:
         conn = get_db_connection()
+
+        if conn is None:
+            st.stop()
+
         cursor = conn.cursor()
 
-        cursor.execute(
-            """
-            INSERT INTO routes
-            (route_name, start_point, end_point, distance_km, estimated_time, route_status)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (route_name, start_point, end_point, distance, time, status)
-        )
+        try:
+            cursor.execute(
+                """
+                INSERT INTO routes
+                (
+                    route_name,
+                    start_point,
+                    end_point,
+                    distance_km,
+                    estimated_time,
+                    route_status
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    route_name,
+                    start_point,
+                    end_point,
+                    distance,
+                    estimated_time,
+                    route_status
+                )
+            )
 
-        conn.commit()
-        cursor.close()
-        conn.close()
+            conn.commit()
+            st.success("Route created successfully!")
+            st.rerun()
 
-        st.success("Route created successfully!")
-        st.rerun()
+        except Error as error:
+            conn.rollback()
+
+            if error.errno == 1062:
+                st.error("Route name already exists.")
+            else:
+                st.error(f"Route create nahi hua: {error}")
+
+        finally:
+            cursor.close()
+            conn.close()
 
     else:
-        st.warning("Please fill Route Name, Start Point and End Point.")
+        st.warning("Route Name, Start Point aur End Point fill karo.")
+
 
 st.divider()
 
-#get route and busess
+
+# ================= LOAD ROUTES AND BUSES =================
+
 conn = get_db_connection()
 
 if conn is None:
-    st.error("Database connect nahi hua. Database credentials check karo.")
     st.stop()
 
-cursor = None
+cursor = conn.cursor()
 
 try:
-    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT id, route_name FROM routes ORDER BY route_name"
+    )
+    routes = cursor.fetchall()
 
-    # Baaki routes page ka database code yahan rahega.
-
-except Error as error:
-    st.error(f"Route database error: {error}")
+    cursor.execute(
+        """
+        SELECT id, bus_number, driver_name, capacity
+        FROM buses
+        ORDER BY bus_number
+        """
+    )
+    buses = cursor.fetchall()
 
 finally:
-    close_db_connection(conn, cursor)
+    cursor.close()
+    conn.close()
 
-cursor.execute("SELECT id, route_name FROM routes")
-routes = cursor.fetchall()
 
-cursor.execute("SELECT id, bus_number, driver_name, capacity FROM buses")
-buses = cursor.fetchall()
+# ================= ALLOCATE BUS =================
 
-cursor.close()
-conn.close()
-
-#allocate BUs
 st.subheader("Allocate Bus to Route")
 
 if routes and buses:
@@ -85,19 +119,34 @@ if routes and buses:
     }
 
     bus_options = {
-        f"{bus[1]} | {bus[2]} | Capacity: {bus[3]}": bus[0]
+        f"{bus[1]} | {bus[2] or 'No Driver'} | Capacity: {bus[3]}": bus[0]
         for bus in buses
     }
 
     with st.form("allocation_form"):
-        selected_route = st.selectbox("Select Route", route_options.keys())
-        selected_bus = st.selectbox("Select Bus", bus_options.keys())
-        allocation_date = st.date_input("Allocation Date", date.today())
+        selected_route = st.selectbox(
+            "Select Route",
+            list(route_options.keys())
+        )
+
+        selected_bus = st.selectbox(
+            "Select Bus",
+            list(bus_options.keys())
+        )
+
+        allocation_date = st.date_input(
+            "Allocation Date",
+            date.today()
+        )
 
         allocate = st.form_submit_button("Allocate Bus")
 
     if allocate:
         conn = get_db_connection()
+
+        if conn is None:
+            st.stop()
+
         cursor = conn.cursor()
 
         try:
@@ -118,50 +167,68 @@ if routes and buses:
             st.success("Bus allocated successfully!")
             st.rerun()
 
-        except Exception:
-            st.error("This route or bus is already allocated.")
+        except Error as error:
+            conn.rollback()
+
+            if error.errno == 1062:
+                st.error("Route ya bus already allocated hai.")
+            else:
+                st.error(f"Allocation failed: {error}")
 
         finally:
             cursor.close()
             conn.close()
 
 elif not routes:
-    st.info("Create a route first.")
+    st.info("Pehle route create karo.")
+
 else:
-    st.info("Add a bus first.")
+    st.info("Pehle bus add karo.")
+
 
 st.divider()
 
-#View Routes
+
+# ================= VIEW ROUTES =================
+
 st.subheader("Routes and Bus Allocations")
 
 conn = get_db_connection()
+
+if conn is None:
+    st.stop()
+
 cursor = conn.cursor()
 
-cursor.execute(
-    """
-    SELECT
-        r.id,
-        r.route_name,
-        r.start_point,
-        r.end_point,
-        r.distance_km,
-        r.estimated_time,
-        r.route_status,
-        b.bus_number,
-        b.driver_name,
-        b.capacity,
-        a.allocation_date
-    FROM routes r
-    LEFT JOIN route_bus_allocation a ON r.id = a.route_id
-    LEFT JOIN buses b ON a.bus_id = b.id
-    """
-)
+try:
+    cursor.execute(
+        """
+        SELECT
+            r.id,
+            r.route_name,
+            r.start_point,
+            r.end_point,
+            r.distance_km,
+            r.estimated_time,
+            r.route_status,
+            b.bus_number,
+            b.driver_name,
+            b.capacity,
+            a.allocation_date
+        FROM routes r
+        LEFT JOIN route_bus_allocation a
+            ON r.id = a.route_id
+        LEFT JOIN buses b
+            ON a.bus_id = b.id
+        ORDER BY r.id DESC
+        """
+    )
 
-rows = cursor.fetchall()
+    rows = cursor.fetchall()
 
-cursor.close()
-conn.close()
+finally:
+    cursor.close()
+    conn.close()
 
 if rows:
     df = pd.DataFrame(
@@ -172,7 +239,7 @@ if rows:
             "Start Point",
             "End Point",
             "Distance",
-            "Time",
+            "Estimated Time",
             "Status",
             "Bus Number",
             "Driver",
@@ -181,71 +248,109 @@ if rows:
         ]
     )
 
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True
+    )
 
 else:
     st.info("No routes found.")
 
+
 st.divider()
 
-#remove allocation
+
+# ================= REMOVE ALLOCATION =================
+
 st.subheader("Remove Bus Allocation")
 
 remove_id = st.number_input(
     "Enter Route ID",
     min_value=1,
     step=1,
-    key="remove"
+    key="remove_allocation"
 )
 
 if st.button("Remove Allocation"):
     conn = get_db_connection()
+
+    if conn is None:
+        st.stop()
+
     cursor = conn.cursor()
 
-    cursor.execute(
-        "DELETE FROM route_bus_allocation WHERE route_id = %s",
-        (remove_id,)
-    )
+    try:
+        cursor.execute(
+            """
+            DELETE FROM route_bus_allocation
+            WHERE route_id = %s
+            """,
+            (remove_id,)
+        )
 
-    conn.commit()
+        conn.commit()
 
-    if cursor.rowcount > 0:
-        st.success("Allocation removed successfully!")
-    else:
-        st.warning("Allocation not found.")
+        if cursor.rowcount > 0:
+            st.success("Allocation removed successfully!")
+        else:
+            st.warning("Allocation not found.")
 
-    cursor.close()
-    conn.close()
-    st.rerun()
+        st.rerun()
+
+    finally:
+        cursor.close()
+        conn.close()
+
 
 st.divider()
 
-#delete route
+
+# ================= DELETE ROUTE =================
+
 st.subheader("Delete Route")
 
 delete_id = st.number_input(
-    "Enter Route ID to delete",
+    "Enter Route ID to Delete",
     min_value=1,
     step=1,
-    key="delete"
+    key="delete_route"
 )
 
 if st.button("Delete Route", type="primary"):
     conn = get_db_connection()
+
+    if conn is None:
+        st.stop()
+
     cursor = conn.cursor()
 
-    cursor.execute(
-        "DELETE FROM routes WHERE id = %s",
-        (delete_id,)
-    )
+    try:
+        cursor.execute(
+            """
+            DELETE FROM route_bus_allocation
+            WHERE route_id = %s
+            """,
+            (delete_id,)
+        )
 
-    conn.commit()
+        cursor.execute(
+            """
+            DELETE FROM routes
+            WHERE id = %s
+            """,
+            (delete_id,)
+        )
 
-    if cursor.rowcount > 0:
-        st.success("Route deleted successfully!")
-    else:
-        st.warning("Route not found.")
+        conn.commit()
 
-    cursor.close()
-    conn.close()
-    st.rerun()
+        if cursor.rowcount > 0:
+            st.success("Route deleted successfully!")
+        else:
+            st.warning("Route not found.")
+
+        st.rerun()
+
+    finally:
+        cursor.close()
+        conn.close()
