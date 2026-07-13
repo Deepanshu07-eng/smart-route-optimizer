@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 from db_helper import get_db_connection
+from mysql.connector import Error
+from db_helper import get_db_connection, close_db_connection
 
 st.title("🗺️ Route & Bus Allocation")
 
@@ -46,7 +48,23 @@ st.divider()
 
 #get route and busess
 conn = get_db_connection()
-cursor = conn.cursor()
+
+if conn is None:
+    st.error("Database connect nahi hua. Database credentials check karo.")
+    st.stop()
+
+cursor = None
+
+try:
+    cursor = conn.cursor(dictionary=True)
+
+    # Baaki routes page ka database code yahan rahega.
+
+except Error as error:
+    st.error(f"Route database error: {error}")
+
+finally:
+    close_db_connection(conn, cursor)
 
 cursor.execute("SELECT id, route_name FROM routes")
 routes = cursor.fetchall()

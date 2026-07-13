@@ -13,3 +13,10 @@ enableXsrfProtection = false
 [client]
 toolbarMode = "minimal"
 showErrorDetails = "none"
+
+[mysql]
+host = "YOUR_REMOTE_MYSQL_HOST"
+port = 3306
+user = "YOUR_REMOTE_MYSQL_USERNAME"
+password = "YOUR_REMOTE_MYSQL_PASSWORD"
+database = "bus_route_system"
