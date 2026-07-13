@@ -3,6 +3,17 @@ import pandas as pd
 from db_helper import get_db_connection
 from geopy.geocoders import Nominatim
 
+import streamlit as st
+
+#css code
+st.markdown("""
+    <style>
+    header {visibility: hidden;}
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+
 def get_coordinates(address):
     try:
         geolocator = Nominatim(
