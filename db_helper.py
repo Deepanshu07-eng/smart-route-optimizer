@@ -57,7 +57,7 @@ def create_tables(connection):
 
     except Error as error:
         connection.rollback()
-        raise error
+        st.error(f"Table creation failed: {error}")
 
     finally:
         if cursor is not None:
@@ -66,7 +66,7 @@ def create_tables(connection):
 
 def get_db_connection():
     try:
-        # Streamlit Cloud
+        # Streamlit Cloud / TiDB
         if "mysql" in st.secrets:
             connection = mysql.connector.connect(
                 host=st.secrets["mysql"]["host"],
@@ -74,7 +74,7 @@ def get_db_connection():
                 user=st.secrets["mysql"]["user"],
                 password=st.secrets["mysql"]["password"],
                 database=st.secrets["mysql"]["database"],
-                ssl_verify_cert=True,
+                ssl_disabled=False,
                 connection_timeout=20
             )
 
@@ -99,38 +99,9 @@ def get_db_connection():
     except Error as error:
         st.error(f"Database connection failed: {error}")
         return None
-    
-    def get_db_connection():
-    try:
-        if "mysql" in st.secrets:
-            connection = mysql.connector.connect(
-                host=st.secrets["mysql"]["host"],
-                port=int(st.secrets["mysql"]["port"]),
-                user=st.secrets["mysql"]["user"],
-                password=st.secrets["mysql"]["password"],
-                database=st.secrets["mysql"]["database"],
-                ssl_verify_cert=True,
-                connection_timeout=20
-            )
-        else:
-            connection = mysql.connector.connect(
-                host="localhost",
-                port=3306,
-                user="root",
-                password="",
-                database="bus_route_system",
-                connection_timeout=10
-            )
 
-        if connection.is_connected():
-            create_tables(connection)
-            return connection
-
-        st.error("Database connection could not be established.")
-        return None
-
-    except Error as error:
-        st.error(f"Database connection failed: {error}")
+    except Exception as error:
+        st.error(f"Unexpected database error: {error}")
         return None
 
 
