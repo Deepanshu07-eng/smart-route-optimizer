@@ -12,3 +12,4 @@ enableXsrfProtection = false
 
 [client]
 toolbarMode = "minimal"
+showErrorDetails = "none"
