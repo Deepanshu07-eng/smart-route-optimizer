@@ -3,39 +3,7 @@ import mysql.connector
 from mysql.connector import Error
 
 
-def get_db_config():
-    """
-    Local computer aur Streamlit Cloud dono ke liye
-    database configuration return karta hai.
-    """
-
-    try:
-        # Streamlit Cloud / secrets.toml configuration
-        return {
-            "host": st.secrets["mysql"]["host"],
-            "port": int(st.secrets["mysql"].get("port", 3306)),
-            "user": st.secrets["mysql"]["user"],
-            "password": st.secrets["mysql"]["password"],
-            "database": st.secrets["mysql"]["database"],
-        }
-
-    except (KeyError, FileNotFoundError):
-        # Local MySQL configuration
-        return {
-            "host": "localhost",
-            "port": 3306,
-            "user": "root",
-            "password": "",
-            "database": "bus_route_system",
-        }
-
-
 def create_tables(connection):
-    """
-    Required database tables create karta hai.
-    Tables already present hon to unhe delete nahi karega.
-    """
-
     cursor = None
 
     try:
@@ -70,21 +38,17 @@ def create_tables(connection):
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 route_name VARCHAR(100) UNIQUE NOT NULL,
                 bus_id INT DEFAULT NULL,
-                start_point TEXT NOT NULL,
-                end_point TEXT NOT NULL,
-                distance_km DECIMAL(10, 2) DEFAULT 0.00,
-                estimated_time VARCHAR(50),
-                route_status VARCHAR(30) DEFAULT 'Active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                start_point TEXT,
+                end_point TEXT
             )
         """)
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attendance (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                student_id INT NOT NULL,
-                date DATE NOT NULL,
-                status VARCHAR(20) NOT NULL,
+                student_id INT,
+                date DATE,
+                status VARCHAR(20),
                 UNIQUE KEY unique_student_date (student_id, date)
             )
         """)
@@ -93,71 +57,45 @@ def create_tables(connection):
 
     except Error as error:
         connection.rollback()
-        raise RuntimeError(f"Table creation failed: {error}") from error
+        raise error
 
     finally:
         if cursor is not None:
             cursor.close()
 
 
-def get_db_connection(show_error=True):
-    """
-    MySQL connection create karke return karta hai.
-    Connection fail hone par None return karta hai.
-    """
-
+def get_db_connection():
     try:
-        config = get_db_config()
+        # Streamlit Cloud
+        if "mysql" in st.secrets:
+            connection = mysql.connector.connect(
+                host=st.secrets["mysql"]["host"],
+                port=int(st.secrets["mysql"]["port"]),
+                user=st.secrets["mysql"]["user"],
+                password=st.secrets["mysql"]["password"],
+                database=st.secrets["mysql"]["database"],
+                ssl_verify_cert=True,
+                connection_timeout=20
+            )
 
-        connection = mysql.connector.connect(
-            host=config["host"],
-            port=config["port"],
-            user=config["user"],
-            password=config["password"],
-            database=config["database"],
-            connection_timeout=15,
-            autocommit=False,
-        )
+        # Local PC / XAMPP
+        else:
+            connection = mysql.connector.connect(
+                host="localhost",
+                port=3306,
+                user="root",
+                password="",
+                database="bus_route_system",
+                connection_timeout=10
+            )
 
-        # New connector versions mein connected property recommended hai.
-        if not connection.connected:
-            if show_error:
-                st.error("Database connection establish nahi ho paya.")
-            return None
+        if connection.is_connected():
+            create_tables(connection)
+            return connection
 
-        create_tables(connection)
-
-        return connection
+        st.error("Database connection could not be established.")
+        return None
 
     except Error as error:
-        if show_error:
-            st.error(f"Database connection failed: {error}")
+        st.error(f"Database connection failed: {error}")
         return None
-
-    except RuntimeError as error:
-        if show_error:
-            st.error(str(error))
-        return None
-
-    except Exception as error:
-        if show_error:
-            st.error(f"Unexpected database error: {error}")
-        return None
-
-
-def close_db_connection(connection, cursor=None):
-    """
-    Cursor aur connection safely close karta hai.
-    """
-
-    try:
-        if cursor is not None:
-            cursor.close()
-    except Error:
-        pass
-
-    try:
-        if connection is not None and connection.connected:
-            connection.close()
-    except Error:
-        pass
